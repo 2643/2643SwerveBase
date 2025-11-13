@@ -28,6 +28,7 @@ import edu.wpi.first.math.kinematics.SwerveModulePosition;
 import edu.wpi.first.math.kinematics.SwerveModuleState;
 import edu.wpi.first.wpilibj.Joystick;
 import edu.wpi.first.wpilibj.Timer;
+import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.Subsystem;
 import frc.robot.Constants;
@@ -168,18 +169,14 @@ public class Swerve extends LegacySwerveDrivetrain implements Subsystem {
     @Override
     public void periodic(){
         updateCurrentHeading(joystick.getX());
+        SmartDashboard.putNumber();
     }
 
     public RobotCentric getSwerveCommand(){
-        if (joystick.getRawAxis(3) > Constants.SwerveConstants.joystickThreshold) {
-            MaxSpeed = (1 - joystick.getRawAxis(3) + 0.3) * NormalMaxSpeed;
-            MaxAngularRate = (1 - joystick.getRawAxis(3) + 0.3) * NormalMaxAngularRate;
-        
-        } else if (joystick.getRawAxis(2) > Constants.SwerveConstants.joystickThreshold) {
-            MaxSpeed = (1 + 2.50 * joystick.getRawAxis(2)) * NormalMaxSpeed;
-            MaxAngularRate = (1 + 2.50 * joystick.getRawAxis(2)) * NormalMaxAngularRate;
-        }
-        var speeds = getDesiredSpeeds(-joystick.getRawAxis(1), -joystick.getRawAxis(0), -(joystick.getRawAxis(2)));
+        MaxSpeed = NormalMaxSpeed;
+        MaxAngularRate = NormalMaxAngularRate;
+       
+        var speeds = getDesiredSpeeds(-joystick.getRawAxis(0), -joystick.getRawAxis(1), -(joystick.getRawAxis(2)));
 
         //Heading correction
         if (useHeadingCorrection) { applyHeadingCorrection(speeds); };
@@ -303,4 +300,5 @@ public class Swerve extends LegacySwerveDrivetrain implements Subsystem {
     public ChassisSpeeds getCurrentRobotChassisSpeeds() {
         return m_kinematics.toChassisSpeeds(getState().ModuleStates);
     }
+    
 }

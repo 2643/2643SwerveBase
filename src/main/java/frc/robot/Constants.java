@@ -98,7 +98,7 @@ public final class Constants {
       private static final double kDriveInertia = 0.001;
 
       //Pigeon ID
-      public static final int kPigeonId = 0;
+      public static final int kPigeonId = 7;
       public static boolean usingPigeon = true;
       
       // Simulated voltage necessary to overcome friction
