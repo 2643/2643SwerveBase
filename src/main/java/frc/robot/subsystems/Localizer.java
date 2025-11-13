@@ -80,23 +80,24 @@ public class Localizer extends SubsystemBase {
       Optional<EstimatedRobotPose> estimatedPoseVision = cameraEstimator.update(result);
 
       //Estimated position based on swerve kinematics
-      Rotation2d rot = new Rotation2d(swerve.getYaw());
+      Rotation2d rot = new Rotation2d(Math.toRadians(swerve.getYaw()));
       SwerveModulePosition[] module_pos = swerve.getSwerveModulePositions();
 
-      //TODO: Add null try-catch here (? issue)
       //Updating pose estimation with odometry & angle
-      poseEstimator.updateWithTime(Timer.getFPGATimestamp(), rot, module_pos);
+      if (poseEstimator != null && module_pos != null) {
+        poseEstimator.updateWithTime(Timer.getFPGATimestamp(), rot, module_pos);
+      }
 
       try {
-        if(result.hasTargets() && estimatedPoseVision.isPresent()){
+        if(result != null && result.hasTargets() && estimatedPoseVision.isPresent()){
           SmartDashboard.putBoolean("Pingu - Has Targets", true);
           poseEstimator.addVisionMeasurement(estimatedPoseVision.get().estimatedPose.toPose2d(), result.getTimestampSeconds());
           
         } else{
           SmartDashboard.putBoolean("Pingu - Has Targets", false);
         }
-      } catch (ConcurrentModificationException e){
-
+      } catch (Exception e){
+        SmartDashboard.putString("Pingu - Vision Error", e.getMessage());
       }
       
       Pose2d estimatedPos = poseEstimator.getEstimatedPosition();

@@ -39,6 +39,7 @@ import frc.robot.Constants;
  */
 public class Swerve extends LegacySwerveDrivetrain implements Subsystem {
     public boolean isFieldOriented = true;
+    public ChassisSpeeds mSpeeds = new ChassisSpeeds();
     public double NormalMaxSpeed = 4; //reference value, for when max speed is changed in robotcontainer
     public double MaxSpeed = NormalMaxSpeed; // 6 meters per second desired top speed
     public double NormalMaxAngularRate = 8.5 * Math.PI; //reference value 
@@ -67,7 +68,6 @@ public class Swerve extends LegacySwerveDrivetrain implements Subsystem {
         super(driveTrainConstants, modules);
         this.joystick = joystick;
 
-        Pigeon2 gyro = new Pigeon2(7);
 
         // reset in new thread since gyro needs some time to boot up and we don't 
         // want to interfere with other code
@@ -168,8 +168,13 @@ public class Swerve extends LegacySwerveDrivetrain implements Subsystem {
 
     @Override
     public void periodic(){
-        updateCurrentHeading(joystick.getX());
-        SmartDashboard.putNumber();
+        updateCurrentHeading(joystick.getRawAxis(0));
+        SmartDashboard.putNumber("x", joystick.getRawAxis(0));
+        SmartDashboard.putNumber("y", joystick.getRawAxis(1));
+        SmartDashboard.putNumber("rotation", joystick.getRawAxis(2));
+        if (mSpeeds != null) {
+            SmartDashboard.putString("speeds", mSpeeds.toString());
+        }
     }
 
     public RobotCentric getSwerveCommand(){
@@ -195,6 +200,7 @@ public class Swerve extends LegacySwerveDrivetrain implements Subsystem {
         if(Math.abs(heading - referenceHeading) > Constants.SwerveConstants.headingThreshold){
             speeds = getDesiredSpeeds(-joystick.getRawAxis(1), -joystick.getRawAxis(0), 0.95 * -joystick.getRawAxis(2) + 0.05 * (heading - referenceHeading)/180);   
         }
+        mSpeeds = speeds;
     }
 
     /**
