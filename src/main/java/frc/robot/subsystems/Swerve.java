@@ -1,0 +1,306 @@
+package frc.robot.subsystems;
+
+import java.util.function.Supplier;
+
+import com.ctre.phoenix6.configs.CurrentLimitsConfigs;
+import com.ctre.phoenix6.configs.TalonFXConfiguration;
+import com.ctre.phoenix6.configs.VoltageConfigs;
+import com.ctre.phoenix6.hardware.Pigeon2;
+import com.ctre.phoenix6.mechanisms.swerve.LegacySwerveDrivetrain;
+import com.ctre.phoenix6.mechanisms.swerve.LegacySwerveDrivetrainConstants;
+import com.ctre.phoenix6.mechanisms.swerve.LegacySwerveModule;
+import com.ctre.phoenix6.mechanisms.swerve.LegacySwerveModule.DriveRequestType;
+import com.ctre.phoenix6.mechanisms.swerve.LegacySwerveModuleConstants;
+import com.ctre.phoenix6.mechanisms.swerve.LegacySwerveRequest;
+import com.ctre.phoenix6.mechanisms.swerve.LegacySwerveRequest.RobotCentric;
+import com.ctre.phoenix6.signals.NeutralModeValue;
+import com.pathplanner.lib.commands.PathPlannerAuto;
+// import com.pathplanner.lib.util.HolonomicPathFollowerConfig;
+// import com.pathplanner.lib.util.PIDConstants;
+// import com.pathplanner.lib.util.ReplanningConfig;
+
+import edu.wpi.first.math.estimator.SwerveDrivePoseEstimator;
+import edu.wpi.first.math.geometry.Rotation2d;
+import edu.wpi.first.math.geometry.Rotation3d;
+import edu.wpi.first.math.kinematics.ChassisSpeeds;
+import edu.wpi.first.math.kinematics.SwerveDriveKinematics;
+import edu.wpi.first.math.kinematics.SwerveModulePosition;
+import edu.wpi.first.math.kinematics.SwerveModuleState;
+import edu.wpi.first.wpilibj.Joystick;
+import edu.wpi.first.wpilibj.Timer;
+import edu.wpi.first.wpilibj2.command.Command;
+import edu.wpi.first.wpilibj2.command.Subsystem;
+import frc.robot.Constants;
+
+/**
+ * Class that extends the Phoenix SwerveDrivetrain class and implements subsystem
+ * so it can be used in command-based projects easily.
+ */
+public class Swerve extends LegacySwerveDrivetrain implements Subsystem {
+    public boolean isFieldOriented = true;
+    public double NormalMaxSpeed = 4; //reference value, for when max speed is changed in robotcontainer
+    public double MaxSpeed = NormalMaxSpeed; // 6 meters per second desired top speed
+    public double NormalMaxAngularRate = 8.5 * Math.PI; //reference value 
+    public double MaxAngularRate = 8.5 * Math.PI; // 3/4 of a rotation per second max angular velocity
+
+    //private AHRS gyro = new AHRS(SerialPort.Port.kMXP);
+    private Pigeon2 pigeon = new Pigeon2(Constants.SwerveConstants.kPigeonId);
+
+    /**
+     * Heading correction stuff here
+     */
+    private boolean useHeadingCorrection = false;
+    private double referenceHeading; // Reference heading for what current heading to
+    private double heading; //Curr heading
+    private double lastHeadingUpdateTime = Timer.getFPGATimestamp(); //Seconds
+
+    private Joystick joystick;
+
+    private final LegacySwerveRequest.ApplyChassisSpeeds autoRequest = new LegacySwerveRequest.ApplyChassisSpeeds();
+    
+    private final LegacySwerveRequest.RobotCentric robotOriented = new LegacySwerveRequest.RobotCentric()
+      .withDeadband(MaxSpeed * 0.1).withRotationalDeadband(MaxAngularRate * 0.1) // Add a 10% deadband
+      .withDriveRequestType(DriveRequestType.OpenLoopVoltage);
+ 
+    public Swerve(Joystick joystick, LegacySwerveDrivetrainConstants driveTrainConstants, LegacySwerveModuleConstants... modules) {
+        super(driveTrainConstants, modules);
+        this.joystick = joystick;
+
+        Pigeon2 gyro = new Pigeon2(7);
+
+        // reset in new thread since gyro needs some time to boot up and we don't 
+        // want to interfere with other code
+        new Thread(() -> {
+        try {
+            Thread.sleep(1000);
+            resetGyro();
+        }
+        catch (Exception e)
+        {
+            System.out.println("Reset Gyro Failed");
+        }
+        }).start(); 
+
+        // configurePathPlanner();
+        setupModules();
+    }
+    
+    /**
+     * For Vision
+     * @return robotOriented so that Localizer can have align command
+     */
+    public LegacySwerveRequest.RobotCentric getRobotOriented(){
+        return robotOriented;
+    } 
+
+    /**
+     * For Vision: Swerve Pose Estimator
+     * @return the swerve pose estimator (made by Phoenix6)
+     */
+    public SwerveDrivePoseEstimator getPoseEstimator(){
+        return m_odometry;
+    }
+
+    /**
+     * For Vision: Swerve Module Positions
+     * @return the swerve drive's module positions (used when updating estimated pose)
+     */
+    public SwerveModulePosition[] getSwerveModulePositions(){
+        return m_modulePositions;
+    }
+
+    public SwerveModuleState[] getSwerveModuleStates(){
+        return m_moduleStates;
+    }
+
+    /**
+     * For Vision: Swerve Kinematics
+     * @return 
+     */
+    public SwerveDriveKinematics getKinematics(){
+        return m_kinematics;
+    }
+
+
+    /**
+     * For Vision: Set the module states to inputted values (states)
+     * @param states the states to update modules to
+     */
+    public void setModuleStates(SwerveModuleState[] states){
+        SwerveModuleState[] module_states = getSwerveModuleStates();
+        for (int n = 0; n < states.length; n++){
+            module_states[n] = states[n];
+;        }
+    }
+
+    public void setupModules(){
+        CurrentLimitsConfigs cur_config = new CurrentLimitsConfigs();
+        VoltageConfigs voltage_config = new VoltageConfigs().withPeakForwardVoltage(Constants.TalonConstants.kVoltageComp);
+        cur_config.withSupplyCurrentLimit(Constants.TalonConstants.kDriveCurrentLimit);
+        cur_config.withSupplyCurrentLimitEnable(true);
+        
+        CurrentLimitsConfigs cur_config_str = new CurrentLimitsConfigs();
+        VoltageConfigs voltage_config_str = new VoltageConfigs().withPeakForwardVoltage(Constants.TalonConstants.kVoltageComp);
+        cur_config.withSupplyCurrentLimit(Constants.TalonConstants.kSteerCurrentLimit);
+        cur_config.withSupplyCurrentLimitEnable(true);
+        
+        for (LegacySwerveModule m : Modules){
+            m.getDriveMotor().getConfigurator().apply(
+            new TalonFXConfiguration()
+                .withCurrentLimits(cur_config));
+            m.getDriveMotor().setNeutralMode(NeutralModeValue.Brake);
+            m.getSteerMotor().setNeutralMode(NeutralModeValue.Brake);
+            // m.getSteerMotor().getConfigurator().apply(
+            //     new TalonFXConfiguration().withCurrentLimits(cur_config_str)
+            // );
+        }
+    }
+
+    //updates current heading + resets reference heading if joystick is being turned
+    public void updateCurrentHeading(double joystickRot){
+        heading = getYaw();
+        if (Math.abs(joystickRot) >= Constants.SwerveConstants.joystickThreshold){
+            referenceHeading = heading;
+            lastHeadingUpdateTime = Timer.getFPGATimestamp();
+        }
+    }
+
+    @Override
+    public void periodic(){
+        updateCurrentHeading(joystick.getX());
+    }
+
+    public RobotCentric getSwerveCommand(){
+        if (joystick.getRawAxis(3) > Constants.SwerveConstants.joystickThreshold) {
+            MaxSpeed = (1 - joystick.getRawAxis(3) + 0.3) * NormalMaxSpeed;
+            MaxAngularRate = (1 - joystick.getRawAxis(3) + 0.3) * NormalMaxAngularRate;
+        
+        } else if (joystick.getRawAxis(2) > Constants.SwerveConstants.joystickThreshold) {
+            MaxSpeed = (1 + 2.50 * joystick.getRawAxis(2)) * NormalMaxSpeed;
+            MaxAngularRate = (1 + 2.50 * joystick.getRawAxis(2)) * NormalMaxAngularRate;
+        }
+        var speeds = getDesiredSpeeds(-joystick.getRawAxis(1), -joystick.getRawAxis(0), -(joystick.getRawAxis(2)));
+
+        //Heading correction
+        if (useHeadingCorrection) { applyHeadingCorrection(speeds); };
+
+        return robotOriented.withVelocityX(speeds.vxMetersPerSecond)
+                    .withVelocityY(speeds.vyMetersPerSecond)
+                    .withRotationalRate(speeds.omegaRadiansPerSecond);
+    }
+
+    /**
+     * TODO: Test heading correction: might be (referenceHeading - heading), accounting for negative; idk
+     */
+    public void applyHeadingCorrection(ChassisSpeeds speeds){
+        //Only change if current heading is off by > 0.5 degrees
+        //NOTE: try to keep heading threshold very low, cuz otherwise it kinda is bad
+        if(Math.abs(heading - referenceHeading) > Constants.SwerveConstants.headingThreshold){
+            speeds = getDesiredSpeeds(-joystick.getRawAxis(1), -joystick.getRawAxis(0), 0.95 * -joystick.getRawAxis(2) + 0.05 * (heading - referenceHeading)/180);   
+        }
+    }
+
+    /**
+     * Return the field or robot relative chassis speeds depending on 
+     * current status taking into account the robots angle from gyro
+     * All passed in values are in range of -1 to 1
+     * @param x positive = away from the driverstation
+     * @param y positive = left when behind alliance wall
+     * @param rot positive = counter-clockwise
+     * @return new field oriented speeds
+     */
+    public ChassisSpeeds getDesiredSpeeds(double x, double y, double rot){
+        if(!isFieldOriented){
+            return new ChassisSpeeds(x * MaxSpeed, 
+                                    y * MaxSpeed, 
+                                    rot * MaxAngularRate);
+        }
+
+        return ChassisSpeeds.fromFieldRelativeSpeeds(
+        x * MaxSpeed, 
+        y * MaxSpeed, 
+        rot * MaxAngularRate, 
+        Rotation2d.fromDegrees(getYaw()));
+    }
+
+    /**
+     * Sets gyro offsets (for starting rotated, such as on the sides of the subwoofer)
+     */
+    public void setGyroOffset(double value){
+        if(Constants.SwerveConstants.usingPigeon){
+            pigeon.setYaw(value);
+        }else{
+            //figure out if this is the correct method
+            //gyro.setAngleAdjustment(value);
+        }
+    }
+
+    /**
+     * Resets both the reference and the current heading 
+     * Assuming "heading" isn't set to 0 here; if it's set to zero then the referenceHeading var is not needed
+     */
+    public void resetGyro(){
+        if (Constants.SwerveConstants.usingPigeon){
+            pigeon.reset();
+        
+        } else {
+            //gyro.reset();
+        }
+
+        heading = getYaw();
+        referenceHeading = heading;
+    }
+
+    @Override
+    public Rotation3d getRotation3d(){
+        if (Constants.SwerveConstants.usingPigeon){
+            return super.getRotation3d();
+        } 
+        return null;
+        //return new Rotation3d(gyro.getRoll(), gyro.getPitch(), gyro.getYaw());
+    }
+
+    /**
+     * @return yaw of gyro, pos = CCW, in degrees
+     */
+    public double getYaw(){
+        if (Constants.SwerveConstants.usingPigeon){
+            return pigeon.getYaw().getValueAsDouble();
+        } 
+        return 0.0;
+        //navx positive yaw is cw, so inverted
+        //return -gyro.getYaw();
+    }
+
+    // private void configurePathPlanner() {
+    //     double driveBaseRadius = Units.inchesToMeters(12.747);
+    //     for (var moduleLocation : m_moduleLocations) {
+    //         driveBaseRadius = Math.max(driveBaseRadius, moduleLocation.getNorm());
+    //     }
+
+    //     AutoBuilder.configureHolonomic(
+    //     ()->this.getState().Pose, // Supplier of current robot pose
+    //     this::seedFieldRelative,  // Consumer for seeding pose against auto
+    //     this::getCurrentRobotChassisSpeeds,
+    //     (speeds)->this.setControl(autoRequest.withSpeeds(speeds)), // Consumer of ChassisSpeeds to drive the robot
+    //     new HolonomicPathFollowerConfig(new PIDConstants(10, 0, 0),
+    //                                     new PIDConstants(10, 0, 0),
+    //                                     Constants.SwerveConstants.kSpeedAt12VoltsMps,
+    //                                     driveBaseRadius,
+    //                                     new ReplanningConfig()),
+    //     ()->false, // Change this if the path needs to be flipped on red vs blue
+    //     this);
+    // }
+
+    public Command applyRequest(Supplier<LegacySwerveRequest> requestSupplier) {
+        return run(() -> this.setControl(requestSupplier.get()));
+    }
+
+    public Command getAutoPath(String pathName) {
+        return new PathPlannerAuto(pathName);
+    }
+
+    public ChassisSpeeds getCurrentRobotChassisSpeeds() {
+        return m_kinematics.toChassisSpeeds(getState().ModuleStates);
+    }
+}
