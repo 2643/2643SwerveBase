@@ -168,21 +168,39 @@ public class Swerve extends LegacySwerveDrivetrain implements Subsystem {
 
     @Override
     public void periodic(){
-        updateCurrentHeading(joystick.getRawAxis(0));
-        SmartDashboard.putNumber("x", joystick.getRawAxis(0));
-        SmartDashboard.putNumber("y", joystick.getRawAxis(1));
-        SmartDashboard.putNumber("rotation", joystick.getRawAxis(2));
-        if (mSpeeds != null) {
-            SmartDashboard.putString("speeds", mSpeeds.toString());
+        if (joystick == null) {
+            SmartDashboard.putBoolean("Joystick Connected", false);
+            return;
+        }
+        
+        SmartDashboard.putBoolean("Joystick Connected", true);
+        
+        try {
+            double rotAxis = joystick.getRawAxis(0);
+            updateCurrentHeading(rotAxis);
+            SmartDashboard.putNumber("x", joystick.getRawAxis(0));
+            SmartDashboard.putNumber("y", joystick.getRawAxis(1));
+            SmartDashboard.putNumber("rotation", joystick.getRawAxis(2));
+            if (mSpeeds != null) {
+                SmartDashboard.putString("speeds", mSpeeds.toString());
+            }
+        } catch (Exception e) {
+            SmartDashboard.putString("Swerve Periodic Error", e.getMessage());
         }
     }
 
     public RobotCentric getSwerveCommand(){
+        if (joystick == null) {
+            return robotOriented.withVelocityX(0)
+                        .withVelocityY(0)
+                        .withRotationalRate(0);
+        }
+        
         MaxSpeed = NormalMaxSpeed;
         MaxAngularRate = NormalMaxAngularRate;
        
         var speeds = getDesiredSpeeds(-joystick.getRawAxis(0), -joystick.getRawAxis(1), -(joystick.getRawAxis(2)));
-
+        mSpeeds = speeds;
         //Heading correction
         if (useHeadingCorrection) { applyHeadingCorrection(speeds); };
 
@@ -198,9 +216,9 @@ public class Swerve extends LegacySwerveDrivetrain implements Subsystem {
         //Only change if current heading is off by > 0.5 degrees
         //NOTE: try to keep heading threshold very low, cuz otherwise it kinda is bad
         if(Math.abs(heading - referenceHeading) > Constants.SwerveConstants.headingThreshold){
-            speeds = getDesiredSpeeds(-joystick.getRawAxis(1), -joystick.getRawAxis(0), 0.95 * -joystick.getRawAxis(2) + 0.05 * (heading - referenceHeading)/180);   
+            speeds = getDesiredSpeeds(-joystick.getRawAxis(1), -joystick.getRawAxis(0), 0.95 * -joystick.getRawAxis(2) + 0.05 * (heading - referenceHeading)/180);
+            mSpeeds = speeds;
         }
-        mSpeeds = speeds;
     }
 
     /**

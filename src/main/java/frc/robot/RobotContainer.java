@@ -58,6 +58,11 @@ public class RobotContainer {
     localizer = new Localizer(drivetrain);
     // Configure the trigger bindings
     configureBindings();
+    
+    // Ensure default command is set
+    if (drivetrain.getDefaultCommand() == null) {
+      System.err.println("WARNING: Drivetrain default command not set properly!");
+    }
   }
 
   /**
@@ -73,7 +78,6 @@ public class RobotContainer {
     // Schedule `ExampleCommand` when `exampleCondition` changes to `true`
     new Trigger(m_exampleSubsystem::exampleCondition)
         .onTrue(new ExampleCommand(m_exampleSubsystem));
-    //drivetrain.setDefaultCommand(drivetrain.applyRequest(() -> localizer.getAlignCommand()));
 
     //Reset Gyro
     zeroGyro.onTrue((new InstantCommand(() -> drivetrain.resetGyro())));
@@ -81,8 +85,9 @@ public class RobotContainer {
     //Toggles between field and robot oriented
     fieldCheck.onTrue(new InstantCommand(() -> drivetrain.isFieldOriented = (!drivetrain.isFieldOriented))); 
    
-    //Drivetrain command
-    drivetrain.setDefaultCommand(drivetrain.applyRequest(() -> drivetrain.getSwerveCommand()));
+    //Drivetrain command - ensure it's always running
+    Command driveCommand = drivetrain.applyRequest(() -> drivetrain.getSwerveCommand());
+    drivetrain.setDefaultCommand(driveCommand);
 
     //Drivetrain logging
     drivetrain.registerTelemetry(logger::telemeterize);
