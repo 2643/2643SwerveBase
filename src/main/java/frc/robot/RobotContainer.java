@@ -39,6 +39,9 @@ import org.littletonrobotics.junction.networktables.LoggedDashboardChooser;
  * subsystems, commands, and button mappings) should be declared here.
  */
 public class RobotContainer {
+  // Values
+  private double MaxSpeed = 4.39; // kSpeedAt12Volts desired top speed
+
   // Subsystems
   private final Drive drive;
   private final Vision vision;
@@ -154,9 +157,9 @@ public class RobotContainer {
     drive.setDefaultCommand(
         DriveCommands.joystickDrive(
             drive,
-            () -> controller.getLeftY(),
-            () -> controller.getLeftX(),
-            () -> controller.getRightX()));
+            () -> controller.getLeftY() * MaxSpeed,
+            () -> controller.getLeftX() * MaxSpeed,
+            () -> controller.getRightX() * MaxSpeed));
 
     // Lock to 0° when A button is held
     controller
