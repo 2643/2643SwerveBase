@@ -157,9 +157,9 @@ public class RobotContainer {
     drive.setDefaultCommand(
         DriveCommands.joystickDrive(
             drive,
-            () -> controller.getLeftY() * MaxSpeed,
-            () -> controller.getLeftX() * MaxSpeed,
-            () -> controller.getRightX() * MaxSpeed));
+            () -> controller.getLeftY(),
+            () -> controller.getLeftX(),
+            () -> -controller.getRightX())); // add deadband
 
     // Lock to 0° when A button is held
     controller
