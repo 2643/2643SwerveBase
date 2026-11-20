@@ -11,6 +11,7 @@ import edu.wpi.first.apriltag.AprilTagFieldLayout;
 import edu.wpi.first.apriltag.AprilTagFields;
 import edu.wpi.first.math.geometry.Rotation3d;
 import edu.wpi.first.math.geometry.Transform3d;
+import edu.wpi.first.math.util.Units;
 
 public class VisionConstants {
   // AprilTag layout
@@ -18,15 +19,33 @@ public class VisionConstants {
       AprilTagFieldLayout.loadField(AprilTagFields.kDefaultField);
 
   // Camera names, must match names configured on coprocessor
-  public static String camera0Name = "limelight-allen";
-  public static String camera1Name = "camera_1";
+  public static String camera0Name = "cam1"; // Front left
+  public static String camera1Name = "cam2"; // Front right
+  public static String camera2Name = "cam3"; // Back right
+  public static String camera3Name = "cam4"; // Back left
+
+  // Camera mount geometry (measure on the robot and update)
+  // X = forward, Y = left, Z = up, all from robot center at floor level
+  private static final double camX = Units.inchesToMeters(10.875); // Module X offset
+  private static final double camY = Units.inchesToMeters(10.875); // Module Y offset
+  private static final double camZ = Units.inchesToMeters(6.0); // Lens height off floor
+  private static final double camPitch = Units.degreesToRadians(-45.0); // Negative = tilted up
 
   // Robot to camera transforms
   // (Not used by Limelight, configure in web UI instead)
-  public static Transform3d robotToCamera0 =
-      new Transform3d(-0.28, 0.23, 0.25, new Rotation3d(0.0, 3.14 / 9, -3.14 / 2));
-  public static Transform3d robotToCamera1 =
-      new Transform3d(-0.2, 0.0, 0.2, new Rotation3d(0.0, -0.4, Math.PI));
+  // Each camera faces outward diagonally at 45 degrees from its corner
+  public static Transform3d robotToCamera0 = // cam1, front left
+      new Transform3d(
+          camX, camY, camZ, new Rotation3d(0.0, camPitch, Units.degreesToRadians(45.0)));
+  public static Transform3d robotToCamera1 = // cam2, front right
+      new Transform3d(
+          camX, -camY, camZ, new Rotation3d(0.0, camPitch, Units.degreesToRadians(-45.0)));
+  public static Transform3d robotToCamera2 = // cam3, back right
+      new Transform3d(
+          -camX, -camY, camZ, new Rotation3d(0.0, camPitch, Units.degreesToRadians(-135.0)));
+  public static Transform3d robotToCamera3 = // cam4, back left
+      new Transform3d(
+          -camX, camY, camZ, new Rotation3d(0.0, camPitch, Units.degreesToRadians(135.0)));
 
   // Basic filtering thresholds
   public static double maxAmbiguity = 0.3;
@@ -41,8 +60,10 @@ public class VisionConstants {
   // (Adjust to trust some cameras more than others)
   public static double[] cameraStdDevFactors =
       new double[] {
-        1.0, // Camera 0
-        1.0 // Camera 1
+        1.0, // cam1
+        1.0, // cam2
+        1.0, // cam3
+        1.0 // cam4
       };
 
   // Multipliers to apply for MegaTag 2 observations
